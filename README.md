@@ -6,14 +6,18 @@ Way too early to use- seriously, it's not useful yet.
 
 > I don't care
 
+Fine. Just run:
+
 `cargo run --release`
+
+Does a lot worse in debug mode in terms of performance.
 
 https://github.com/jasonjmcghee/xrem/assets/1522149/bbf7903a-77ae-4540-85c5-9430c05355fc
 
 ## "implemented" (read: likely terrible)
 Currently implements, in a parallel / non-blocking way:
 - screenshot capture every 2 seconds
-- OCR
+- OCR at capture time
 - calculate text embedding (rem doesn't have this yet lol)
 - stream to mp4 without writing pngs to disk
 
