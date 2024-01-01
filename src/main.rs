@@ -102,7 +102,7 @@ fn perform_ocr(dynamic_image: &DynamicImage) -> Result<String, Box<dyn std::erro
 
     // OCR
     let text = image_to_string(&image, &args)?;
-    println!("Text length: {}", text.len());
+    println!("OCR: {}", text);
 
     Ok(text)
 }
