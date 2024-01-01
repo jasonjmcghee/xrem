@@ -3,7 +3,7 @@ use ffmpeg_next::{
 };
 use image::{DynamicImage, ImageBuffer, Rgb};
 
-fn extract_frame_from_video(
+fn extract_frames_from_video(
     video_path: &str,
     frame_numbers: &[i64],
 ) -> Result<Vec<DynamicImage>, ffmpeg_next::Error> {
