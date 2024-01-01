@@ -1,0 +1,5 @@
+/target
+*.mp4
+*.duckdb
+.DS_Store
+db.sqlite3
