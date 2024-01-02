@@ -16,7 +16,7 @@ Does a lot worse in debug mode in terms of performance.
 - when will it be ready?
     - idk, but with your help it might go faster
 - why is the current ocr solution screaming about ARNs?
-    - idk
+    - idk, if it was AWS's textract it might make more sense
 - not having live text analysis (MacOS) seems like selecting from past screenshots will be much harder to build
     - yeah  
 
