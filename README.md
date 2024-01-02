@@ -12,6 +12,14 @@ Fine. Just run:
 
 Does a lot worse in debug mode in terms of performance.
 
+## FAQ
+- when will it be ready?
+    - idk, but with your help it might go faster
+- why is the current ocr solution screaming about ARNs?
+    - idk
+- not having live text analysis seems like selecting from past screenshots will be much harder
+    - yeah  
+
 https://github.com/jasonjmcghee/xrem/assets/1522149/bbf7903a-77ae-4540-85c5-9430c05355fc
 
 ## "implemented" (read: likely terrible)
