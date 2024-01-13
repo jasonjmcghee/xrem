@@ -2,11 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
-    process::exit,
     sync::{Arc, Mutex},
 };
 use tauri::{
-    CustomMenuItem, LogicalPosition, LogicalSize, Manager, SystemTray, SystemTrayEvent,
+    CustomMenuItem, LogicalPosition, Manager, SystemTray, SystemTrayEvent,
     SystemTrayMenu, SystemTrayMenuItem,
 };
 

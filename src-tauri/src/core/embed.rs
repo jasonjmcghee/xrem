@@ -2,8 +2,8 @@ use candle::Tensor;
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, HiddenAct, DTYPE};
 use lazy_static::lazy_static;
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
+
+
 use std::sync::Mutex;
 use tokenizers::{PaddingParams, Tokenizer};
 
@@ -133,7 +133,7 @@ pub fn generate_embeddings(text: &str) -> EmbeddingResult {
     let elem_count = reshaped_embeddings.elem_count();
     let out = match reshaped_embeddings.to_vec1::<f32>() {
         Ok(a) => a,
-        Err(e) => vec![],
+        Err(_e) => vec![],
     };
 
     EmbeddingResult {
