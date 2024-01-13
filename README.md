@@ -7,7 +7,7 @@ Way too early to use- seriously, it's not useful yet.
 > I don't care
 Fine. Just run:
 
-`npm run tauri dev`
+`npm run tauri dev -- --release`
 
 Does a lot worse in debug mode in terms of performance.
 
