@@ -5,7 +5,10 @@ use std::{
     process::exit,
     sync::{Arc, Mutex},
 };
-use tauri::{CustomMenuItem, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem};
+use tauri::{
+    CustomMenuItem, LogicalPosition, LogicalSize, Manager, SystemTray, SystemTrayEvent,
+    SystemTrayMenu, SystemTrayMenuItem,
+};
 
 mod core;
 
@@ -19,9 +22,13 @@ fn greet(name: &str) -> String {
 
 fn make_tray() -> SystemTray {
     let quit = CustomMenuItem::new("quit".to_string(), "Quit");
-    let hide = CustomMenuItem::new("toggle_recording".to_string(), "Start Recording");
+    let toggle_timeline = CustomMenuItem::new("toggle_timeline".to_string(), "Open Timeline");
+    let toggle_search = CustomMenuItem::new("toggle_search".to_string(), "Open Search");
+    let record = CustomMenuItem::new("toggle_recording".to_string(), "Start Recording");
     let tray_menu = SystemTrayMenu::new()
-        .add_item(hide)
+        .add_item(record)
+        .add_item(toggle_timeline)
+        .add_item(toggle_search)
         .add_native_item(SystemTrayMenuItem::Separator)
         .add_item(quit);
     let tray = SystemTray::new().with_menu(tray_menu);
@@ -71,6 +78,30 @@ fn main() {
                                 item_handle.set_title("Stop Recording").unwrap();
                                 *handles = Some(start_recording());
                                 *is_capturing = true;
+                            }
+                        }
+                        "toggle_search" => {
+                            let search = app.get_window("search").unwrap();
+                            if search.is_visible().unwrap() {
+                                search.hide();
+                            } else if let Some(monitor) = search.current_monitor().unwrap() {
+                                let size = monitor.size();
+                                let scale_factor = monitor.scale_factor();
+                                search.set_size(size.to_logical::<u32>(scale_factor));
+                                search.set_position(LogicalPosition::new(0.0, 0.0));
+                                search.show();
+                            }
+                        }
+                        "toggle_timeline" => {
+                            let timeline = app.get_window("timeline").unwrap();
+                            if timeline.is_visible().unwrap() {
+                                timeline.hide();
+                            } else if let Some(monitor) = timeline.current_monitor().unwrap() {
+                                let size = monitor.size();
+                                let scale_factor = monitor.scale_factor();
+                                timeline.set_size(size.to_logical::<u32>(scale_factor));
+                                timeline.set_position(LogicalPosition::new(0.0, 0.0));
+                                timeline.show();
                             }
                         }
                         _ => {}

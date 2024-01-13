@@ -38,11 +38,22 @@
     },
     "windows": [
       {
-        "fullscreen": false,
-        "resizable": true,
-        "title": "xrem",
-        "width": 800,
-        "height": 600
+        "label": "timeline",
+        "maximized": false,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "title": "xrem: Timeline",
+        "visible": false
+      },
+      {
+        "label": "search",
+        "maximized": false,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "title": "xrem: Search",
+        "visible": false
       }
     ]
   }
