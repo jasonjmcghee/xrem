@@ -5,7 +5,7 @@ Cross-platform in-progress implementation of [rem](https://github.com/jasonjmcgh
 Way too early to use- seriously, it's not useful yet.
 
 > I don't care
-`cargo run --release`
+`npm run tauri dev`
 
 https://github.com/jasonjmcghee/xrem/assets/1522149/bbf7903a-77ae-4540-85c5-9430c05355fc
 

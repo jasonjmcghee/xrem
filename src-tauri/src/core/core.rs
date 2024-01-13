@@ -5,25 +5,48 @@ use screenshots::Screen;
 use std::io::Cursor;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 use threadpool::ThreadPool;
 
-mod db;
-mod embed;
-mod video;
+use super::embed;
 
 const FRAME_BUFFER_SIZE: usize = 30;
 const SCREENSHOT_INTERVAL: Duration = Duration::from_secs(2);
 const OCR_THREAD_POOL_SIZE: usize = 4;
 const IMAGE_ENCODE_THREADS: usize = 4;
 
-fn start_recording() -> thread::JoinHandle<()> {
+enum ControlMessage {
+    Pause,
+    Resume,
+    Stop,
+}
+
+pub struct CaptureHandles {
+    pub capture_handle: thread::JoinHandle<()>,
+    pub stream_handle: thread::JoinHandle<()>,
+    pub control_sender: mpsc::Sender<ControlMessage>,
+}
+
+impl CaptureHandles {
+    pub fn pause_recording(&self) {
+        self.control_sender.send(ControlMessage::Pause).unwrap();
+    }
+
+    pub fn stop_recording(&self) {
+        self.control_sender.send(ControlMessage::Stop).unwrap();
+    }
+}
+
+pub fn start_recording() -> CaptureHandles {
     let config_path = "models/gte-small/config.json";
     let tokenizer_path = "models/gte-small/tokenizer.json";
     let weights_path = "models/gte-small/model.safetensors";
+
+    let (control_sender, control_receiver) = mpsc::channel();
 
     // Initialize the model first
     embed::init_model(config_path, tokenizer_path, weights_path, false);
@@ -33,11 +56,13 @@ fn start_recording() -> thread::JoinHandle<()> {
 
     // Capture thread
     let buffer_clone = frame_buffer.clone();
-    thread::spawn(move || {
-        capture_screenshots(buffer_clone, &ocr_pool).expect("Error capturing screenshots");
+
+    let capture_handle = thread::spawn(move || {
+        capture_screenshots(buffer_clone, &ocr_pool, control_receiver)
+            .expect("Error capturing screenshots");
     });
 
-    return thread::spawn(move || {
+    let stream_handle = thread::spawn(move || {
         // Main thread for processing frames
         let (buffer, cvar) = &*frame_buffer;
         loop {
@@ -51,16 +76,43 @@ fn start_recording() -> thread::JoinHandle<()> {
             stream_to_ffmpeg(frames_to_process);
         }
     });
+
+    return CaptureHandles {
+        capture_handle,
+        stream_handle,
+        control_sender,
+    };
 }
 
 fn capture_screenshots(
     frame_buffer: Arc<(Mutex<Vec<DynamicImage>>, Condvar)>,
     ocr_pool: &ThreadPool,
+    control_receiver: mpsc::Receiver<ControlMessage>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let screens = Screen::all()?;
     let screen = screens.first().unwrap();
+    let mut is_paused = false;
 
     loop {
+        // Check for control messages
+        if let Ok(message) = control_receiver.try_recv() {
+            match message {
+                ControlMessage::Pause => is_paused = true,
+                ControlMessage::Resume => is_paused = false,
+                ControlMessage::Stop => {
+                    // Process the frames
+                    process_remaining_frames(&frame_buffer);
+                    return Ok(());
+                }
+            }
+        }
+
+        if is_paused {
+            // If paused, sleep for a bit and continue the loop to keep checking for new messages
+            thread::sleep(Duration::from_millis(100));
+            continue;
+        }
+
         let buffer = screen.capture()?;
         let image = DynamicImage::ImageRgba8(buffer.clone());
 
@@ -70,8 +122,8 @@ fn capture_screenshots(
             let _ocr_result = match perform_ocr(&image_clone) {
                 Ok(result) => {
                     // Embed the recognized text!
-                    let embeddings = embed::generate_embeddings(&result);
-                    println!("Embeddings length: {}", embeddings.len);
+                    // let embeddings = embed::generate_embeddings(&result);
+                    // println!("Embeddings length: {}", embeddings.len);
                     result
                 }
                 Err(e) => {
@@ -124,6 +176,8 @@ fn stream_to_ffmpeg(frames: Vec<DynamicImage>) {
             //"h264_videotoolbox",
             "-vcodec",
             "libx264",
+            "-preset",
+            "ultrafast",
             "-pix_fmt",
             "yuv420p",
             "-crf",
@@ -176,6 +230,12 @@ fn stream_to_ffmpeg(frames: Vec<DynamicImage>) {
     println!("waited?");
 }
 
-fn main() {
-    start_recording().join();
+fn process_remaining_frames(frame_buffer: &Arc<(Mutex<Vec<DynamicImage>>, Condvar)>) {
+    let (lock, _) = &**frame_buffer;
+    let mut frames = lock.lock().unwrap();
+
+    if !frames.is_empty() {
+        let frames_to_process = frames.drain(..).collect::<Vec<_>>();
+        stream_to_ffmpeg(frames_to_process);
+    }
 }

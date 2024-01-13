@@ -1,16 +1,21 @@
 [package]
 name = "xrem"
-version = "0.1.0"
+version = "0.0.0"
+description = "A Tauri App"
+authors = ["Jason McGhee <mcghee.j@gmail.com>"]
+license = "MIT"
+repository = "jasonjmcghee/xrem"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[profile.release]
-opt-level = 3
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
 
 [dependencies]
-# GUI and system interaction
-wry = "0.35.1"
-winit = "0.29.8"
+tauri = { version = "1.5", features = [ "system-tray", "shell-open"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 # Cross-platform screen capture
 screenshots = "0.8.6"
@@ -38,4 +43,11 @@ candle-nn = "0.3.2"
 candle-transformers = "0.3.2"
 tokenizers = "0.15.0"
 lazy_static = "1.4.0"
-serde_json = "1.0"
+
+[profile.release]
+opt-level = 3
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
