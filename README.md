@@ -44,6 +44,8 @@ BUT, this is using cross-platform rust libraries for the functionality we need.
 
 ## drafted / in progress / might work if actually called
 - DB layer -> talking to duckdb
+    - very likely the wrong solution b/c it was built for OLAP and rebuilding the FTS index constantly is a terrible idea.
+    - should probably use sqlite instead
 - frame extraction by index from mp4 videos
 
 ## not implemented at all
