@@ -39,6 +39,7 @@
     "windows": [
       {
         "label": "timeline",
+        "url": "timeline",
         "maximized": false,
         "decorations": false,
         "resizable": false,
@@ -48,6 +49,7 @@
       },
       {
         "label": "search",
+        "url": "search",
         "maximized": false,
         "decorations": false,
         "resizable": false,
