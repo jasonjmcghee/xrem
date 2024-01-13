@@ -19,6 +19,10 @@ Currently implements, in a parallel / non-blocking way:
 - calculate text embedding (rem doesn't have this yet lol)
 - stream to mp4 without writing pngs to disk
 
+(more recent screenshot of tray - still using default tauri logo)
+
+<img width="156" alt="image" src="https://github.com/jasonjmcghee/xrem/assets/1522149/364dfe1f-ba6c-4cd5-b4ab-3ebc6bef168a">
+
 ## Demo of the above implemented features:
 
 Taking screenshots + ocr transcript printed to terminal, screenshots streamed to videos and saved, 
