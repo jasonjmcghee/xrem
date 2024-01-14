@@ -41,7 +41,7 @@ impl CaptureHandles {
     }
 }
 
-pub fn start_recording() -> CaptureHandles {
+pub fn start_recording(local_data_dir: String) -> CaptureHandles {
     let config_path = "models/gte-small/config.json";
     let tokenizer_path = "models/gte-small/tokenizer.json";
     let weights_path = "models/gte-small/model.safetensors";
@@ -57,10 +57,19 @@ pub fn start_recording() -> CaptureHandles {
     // Capture thread
     let buffer_clone = frame_buffer.clone();
 
+    let local_data_dir_capture_handle = local_data_dir.clone();
+
     let capture_handle = thread::spawn(move || {
-        capture_screenshots(buffer_clone, &ocr_pool, control_receiver)
-            .expect("Error capturing screenshots");
+        capture_screenshots(
+            buffer_clone,
+            &ocr_pool,
+            control_receiver,
+            local_data_dir_capture_handle,
+        )
+        .expect("Error capturing screenshots");
     });
+
+    let local_data_dir_stream_handle = local_data_dir.clone();
 
     let stream_handle = thread::spawn(move || {
         // Main thread for processing frames
@@ -73,7 +82,7 @@ pub fn start_recording() -> CaptureHandles {
 
             // Drain frames and process with FFmpeg
             let frames_to_process = frames.drain(..).collect::<Vec<_>>();
-            stream_to_ffmpeg(frames_to_process);
+            stream_to_ffmpeg(frames_to_process, local_data_dir_stream_handle.clone());
         }
     });
 
@@ -88,10 +97,12 @@ fn capture_screenshots(
     frame_buffer: Arc<(Mutex<Vec<DynamicImage>>, Condvar)>,
     ocr_pool: &ThreadPool,
     control_receiver: mpsc::Receiver<ControlMessage>,
+    local_data_dir: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let screens = Screen::all()?;
     let screen = screens.first().unwrap();
     let mut is_paused = false;
+    let local_data_dir_clone = local_data_dir.clone();
 
     loop {
         // Check for control messages
@@ -101,7 +112,7 @@ fn capture_screenshots(
                 ControlMessage::Resume => is_paused = false,
                 ControlMessage::Stop => {
                     // Process the frames
-                    process_remaining_frames(&frame_buffer);
+                    process_remaining_frames(&frame_buffer, local_data_dir_clone);
                     return Ok(());
                 }
             }
@@ -159,11 +170,12 @@ fn perform_ocr(dynamic_image: &DynamicImage) -> Result<String, Box<dyn std::erro
     Ok(text)
 }
 
-fn stream_to_ffmpeg(frames: Vec<DynamicImage>) {
+fn stream_to_ffmpeg(frames: Vec<DynamicImage>, local_data_dir: String) {
     let encode_pool = ThreadPool::new(IMAGE_ENCODE_THREADS); // Define NUM_ENCODE_THREADS based on your CPU
     print!("getting ready to stream..");
     let time = Utc::now();
-    let output_name = format!("{}.mp4", time);
+    let local_data_dir_clone = local_data_dir.clone();
+    let output_name = format!("{}/{}.mp4", local_data_dir_clone, time);
     let mut child = Command::new("ffmpeg")
         .args([
             "-f",
@@ -230,12 +242,16 @@ fn stream_to_ffmpeg(frames: Vec<DynamicImage>) {
     println!("waited?");
 }
 
-fn process_remaining_frames(frame_buffer: &Arc<(Mutex<Vec<DynamicImage>>, Condvar)>) {
+fn process_remaining_frames(
+    frame_buffer: &Arc<(Mutex<Vec<DynamicImage>>, Condvar)>,
+    local_data_dir: String,
+) {
+    let local_data_dir_clone = local_data_dir.clone();
     let (lock, _) = &**frame_buffer;
     let mut frames = lock.lock().unwrap();
 
     if !frames.is_empty() {
         let frames_to_process = frames.drain(..).collect::<Vec<_>>();
-        stream_to_ffmpeg(frames_to_process);
+        stream_to_ffmpeg(frames_to_process, local_data_dir_clone);
     }
 }

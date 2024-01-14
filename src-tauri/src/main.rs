@@ -2,21 +2,35 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
+    fs,
     sync::{Arc, Mutex},
 };
 use tauri::{
-    CustomMenuItem, LogicalPosition, Manager, SystemTray, SystemTrayEvent,
-    SystemTrayMenu, SystemTrayMenuItem,
+    CustomMenuItem, LogicalPosition, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu,
+    SystemTrayMenuItem,
 };
-
-mod core;
-
+use tokio::sync::oneshot;
 use core::{start_recording, CaptureHandles};
 
-// Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+mod core;
+mod server;
+
+
+fn start_server(app_handle: tauri::AppHandle) {
+    println!("starting server...");
+    let local_data_dir = app_handle.path_resolver().app_local_data_dir();
+    let (tx, rx) = oneshot::channel();
+
+    if let Some(dir) = local_data_dir.clone() {
+        let path = dir.to_string_lossy().to_string();
+        if let Ok(()) = fs::create_dir_all(path.clone()) {
+            let path_clone = path.clone();
+            tokio::spawn(async move {
+                server::start_frame_server(tx, path_clone).await;
+            });
+        }
+    }
+    println!("started server...");
 }
 
 fn make_tray() -> SystemTray {
@@ -34,11 +48,20 @@ fn make_tray() -> SystemTray {
     return tray;
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
+    println!("starting app...");
+    // Wait for the server to start
+    // let _ = rx.await;
+
     let is_capturing = Arc::new(Mutex::new(false));
     let handles: Arc<Mutex<Option<CaptureHandles>>> = Arc::new(Mutex::new(None));
 
     tauri::Builder::default()
+        .setup(|app| {
+            start_server(app.app_handle());
+            Ok(())
+        })
         .on_window_event(|event| match event.event() {
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 event.window().hide().unwrap();
@@ -67,16 +90,21 @@ fn main() {
                             std::process::exit(0);
                         }
                         "toggle_recording" => {
-                            if *is_capturing {
-                                item_handle.set_title("Start Recording").unwrap();
-                                if let Some(ref mut handles) = *handles {
-                                    handles.stop_recording()
+                            let local_data_dir = app.path_resolver().app_local_data_dir();
+
+                            if let Some(dir) = local_data_dir.clone() {
+                                if *is_capturing {
+                                    item_handle.set_title("Start Recording").unwrap();
+                                    if let Some(ref mut handles) = *handles {
+                                        handles.stop_recording()
+                                    }
+                                    *is_capturing = false;
+                                } else {
+                                    item_handle.set_title("Stop Recording").unwrap();
+                                    let path = dir.to_string_lossy().to_string();
+                                    *handles = Some(start_recording(path));
+                                    *is_capturing = true;
                                 }
-                                *is_capturing = false;
-                            } else {
-                                item_handle.set_title("Stop Recording").unwrap();
-                                *handles = Some(start_recording());
-                                *is_capturing = true;
                             }
                         }
                         "toggle_search" => {
@@ -109,7 +137,6 @@ fn main() {
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![greet])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

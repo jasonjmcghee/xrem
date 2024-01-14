@@ -1,9 +1,9 @@
 use ffmpeg_next::{
-    format, format::Pixel, frame, media, software::scaling, util::frame::video::Video,
+    format, format::Pixel, media, software::scaling, util::frame::video::Video,
 };
 use image::{DynamicImage, ImageBuffer, Rgb};
 
-fn extract_frames_from_video(
+pub fn extract_frames_from_video(
     video_path: &str,
     frame_numbers: &[i64],
 ) -> Result<Vec<DynamicImage>, ffmpeg_next::Error> {
@@ -21,11 +21,12 @@ fn extract_frames_from_video(
     let context_decoder =
         ffmpeg_next::codec::context::Context::from_parameters(input_stream.parameters())?;
     let mut decoder = context_decoder.decoder().video()?;
+    println!("Trying to scale...");
     let mut scaler = scaling::Context::get(
         decoder.format(),
         decoder.width(),
         decoder.height(),
-        Pixel::RGB8,
+        Pixel::RGB24,
         decoder.width(),
         decoder.height(),
         scaling::Flags::BILINEAR,
@@ -35,11 +36,11 @@ fn extract_frames_from_video(
         |decoder: &mut ffmpeg_next::decoder::Video| -> Result<Video, ffmpeg_next::Error> {
             let mut fni: usize = 0;
 
-            let mut decoded = frame::Video::empty();
+            let mut decoded = Video::empty();
             let mut vi: i64 = 0;
             if let Some(&last_frame) = frame_numbers.last() {
                 let mut rgb_frame = Video::empty();
-                while vi < last_frame && decoder.receive_frame(&mut decoded).is_ok() {
+                while vi <= last_frame && decoder.receive_frame(&mut decoded).is_ok() {
                     if vi == frame_numbers[fni] {
                         scaler.run(&decoded, &mut rgb_frame)?;
                         // next frame in list...
@@ -58,7 +59,7 @@ fn extract_frames_from_video(
             let frames = receive_and_process_frames(&mut decoder)?;
             for (i, _) in frame_numbers.iter().enumerate() {
                 let frame = frames.data(i);
-                let img: ImageBuffer<Rgb<u8>, Vec<u8>> = image::ImageBuffer::from_raw(
+                let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_raw(
                     decoder.width() as u32,
                     decoder.height() as u32,
                     frame.to_vec(),
