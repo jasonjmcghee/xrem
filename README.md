@@ -13,17 +13,19 @@ Does a lot worse in debug mode in terms of performance.
 
 ## "implemented" (read: likely terrible)
 Currently implements, in a parallel / non-blocking way:
-- click the status icon to start / stop recording
+- click the status icon and choose to start / stop recording
 - screenshot capture every 2 seconds
 - OCR at capture time
 - calculate text embedding (rem doesn't have this yet lol)
 - stream to mp4 without writing pngs to disk
+- basic tray icon + menu
+- options which open svelte-based windows of future functionality
 
 (more recent screenshot of tray - still using default tauri logo)
 
 <img width="156" alt="image" src="https://github.com/jasonjmcghee/xrem/assets/1522149/364dfe1f-ba6c-4cd5-b4ab-3ebc6bef168a">
 
-## Demo of the above implemented features:
+## First Demo of basic poc:
 
 Taking screenshots + ocr transcript printed to terminal, screenshots streamed to videos and saved, 
 then manually showing this by scrubbing. 
@@ -42,7 +44,11 @@ BUT, this is using cross-platform rust libraries for the functionality we need.
 - not having live text analysis (MacOS) seems like selecting from past screenshots will be much harder to build
     - yeah  
 
-## drafted / in progress / might work if actually called
+## in progress
+- basic timeline ui
+- local rust server for front to retrieve data from
+
+## drafted / might work if actually called
 - DB layer -> talking to duckdb
     - very likely the wrong solution b/c it was built for OLAP and rebuilding the FTS index constantly is a terrible idea.
     - should probably use sqlite instead
@@ -54,5 +60,4 @@ BUT, this is using cross-platform rust libraries for the functionality we need.
         - overlay transparent text on image so as to be selectable
 - [ ] search UI (display thumbnails, matched text, date, application?)
 - [ ] settings
-- [ ] tray icon + menu
 - [ ] window-specific OCR / filtering
