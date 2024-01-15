@@ -2,8 +2,8 @@
     import { onMount } from 'svelte';
     import { invoke } from '@tauri-apps/api/tauri';
 
-    let frameNumber = 0;
-    let swipePosition = 0;
+    let frameNumber = 1;
+    let swipePosition = 1;
     let imageSrc = '';
     let debounceTimer;
 
@@ -35,7 +35,7 @@
 
     function handlePan(event) {
         const { deltaX } = event;
-        swipePosition = Math.min(Math.max(0, swipePosition + (deltaX / 20)), 10)
+        swipePosition = Math.min(Math.max(1, swipePosition + (deltaX / 20)), 10)
         updateFrame();
     }
 

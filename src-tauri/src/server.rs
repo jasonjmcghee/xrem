@@ -1,5 +1,5 @@
-use std::{io::Cursor, sync::Arc};
 use std::sync::Mutex;
+use std::{io::Cursor, sync::Arc};
 
 use axum::{
     body::Bytes,
@@ -10,10 +10,10 @@ use axum::{
 };
 
 use image::ImageOutputFormat;
-use tokio::sync::{oneshot};
+use tokio::sync::oneshot;
 use tower_http::cors::CorsLayer;
 
-use crate::core::{DatabaseManager, extract_frames_from_video};
+use crate::core::{extract_frames_from_video, DatabaseManager};
 
 #[derive(Clone)]
 struct AppState {
@@ -21,27 +21,42 @@ struct AppState {
     db: Arc<Mutex<Option<DatabaseManager>>>,
 }
 
+// TODO: Optimize this to do chunk loading, instead of starting from scratch with the
+// frame every single time
 async fn get_frame_handler(
     Path(frame_number): Path<i64>,
     State(state): State<Arc<AppState>>,
 ) -> (StatusCode, Bytes) {
-    let video_path = state.db.lock().unwrap().as_mut().unwrap().get_video_chunk_path(frame_number)
-        .expect("Failed to get video chunk path").unwrap();
-    match extract_frames_from_video(&video_path, &[frame_number]) {
-        Ok(frames) => {
-            if let Some(frame) = frames.into_iter().next() {
-                let mut cursor = Cursor::new(Vec::new());
-                if frame.write_to(&mut cursor, ImageOutputFormat::Png).is_ok() {
-                    return (StatusCode::OK, Bytes::from(cursor.into_inner()));
+    let db_video_ref = state.db.clone();
+    let maybe_video_path = {
+        let mut db_clone = db_video_ref.lock().unwrap();
+        db_clone
+            .as_mut()
+            .unwrap()
+            .get_frame(frame_number)
+            .expect("Failed to get frame")
+    };
+    if let Some((offset_index, video_path)) = maybe_video_path {
+        match extract_frames_from_video(&video_path, &[offset_index]) {
+            Ok(frames) => {
+                if let Some(frame) = frames.into_iter().next() {
+                    let mut cursor = Cursor::new(Vec::new());
+                    if frame.write_to(&mut cursor, ImageOutputFormat::Png).is_ok() {
+                        return (StatusCode::OK, Bytes::from(cursor.into_inner()));
+                    }
                 }
             }
+            _ => {}
         }
-        _ => {}
     }
     (StatusCode::NOT_FOUND, Bytes::new())
 }
 
-pub async fn start_frame_server(tx: oneshot::Sender<()>, local_data_dir: String, db: Arc<Mutex<Option<DatabaseManager>>>) {
+pub async fn start_frame_server(
+    tx: oneshot::Sender<()>,
+    local_data_dir: String,
+    db: Arc<Mutex<Option<DatabaseManager>>>,
+) {
     let state = Arc::new(AppState { local_data_dir, db });
 
     let app = Router::new()

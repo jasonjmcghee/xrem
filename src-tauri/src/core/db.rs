@@ -1,5 +1,5 @@
-use rusqlite::{params, Connection, Result, params_from_iter};
 use chrono::{NaiveDateTime, Utc};
+use rusqlite::{params, params_from_iter, Connection, Result};
 
 // Structs representing the database tables
 #[derive(Debug)]
@@ -85,8 +85,7 @@ impl DatabaseManager {
             chunk_id INTEGER NOT NULL,
             offset_index INTEGER NOT NULL,
             timestamp TIMESTAMP NOT NULL,
-            active_application_name TEXT,
-            FOREIGN KEY(chunk_id) REFERENCES video_chunks(id)
+            active_application_name TEXT
         )",
             [],
         )?;
@@ -110,7 +109,6 @@ impl DatabaseManager {
         )?;
         // Create indices and seed data as necessary
         self.create_indices()?;
-        self.seed_unique_app_names()?;
 
         Ok(())
     }
@@ -119,7 +117,8 @@ impl DatabaseManager {
     pub fn purge(&mut self) -> Result<()> {
         self.conn.execute("DROP TABLE IF EXISTS video_chunks", [])?;
         self.conn.execute("DROP TABLE IF EXISTS frames", [])?;
-        self.conn.execute("DROP TABLE IF EXISTS unique_app_names", [])?;
+        self.conn
+            .execute("DROP TABLE IF EXISTS unique_app_names", [])?;
         self.conn.execute("DROP TABLE IF EXISTS all_text", [])?;
 
         self.create_tables()?;
@@ -141,18 +140,6 @@ impl DatabaseManager {
         Ok(())
     }
 
-    // Function to seed unique_app_names table with distinct application names from frames table
-    fn seed_unique_app_names(&self) -> Result<()> {
-        let mut stmt = self.conn.prepare(
-            "INSERT INTO unique_app_names (active_application_name)
-         SELECT DISTINCT active_application_name FROM frames
-         WHERE active_application_name IS NOT NULL AND
-               active_application_name NOT IN (SELECT active_application_name FROM unique_app_names)",
-        )?;
-        stmt.execute([])?;
-        Ok(())
-    }
-
     // Function to get the current chunk ID
     fn get_current_chunk_id(&self) -> Result<i64> {
         self.conn.query_row(
@@ -164,11 +151,10 @@ impl DatabaseManager {
 
     // Function to get the last frame ID
     fn get_last_frame_id(&self) -> Result<i64> {
-        self.conn.query_row(
-            "SELECT IFNULL(MAX(id), 0) FROM frames",
-            [],
-            |row| row.get(0),
-        )
+        self.conn
+            .query_row("SELECT IFNULL(MAX(id), 0) FROM frames", [], |row| {
+                row.get(0)
+            })
     }
 
     // Method to start a new video chunk and return its ID
@@ -194,8 +180,15 @@ impl DatabaseManager {
                 active_application_name,
             ],
         )?;
+
         self.current_frame_offset += 1;
         self.last_frame_id = frame_id as i64;
+
+        // If the active application name exists, ensure it is in the unique_app_names table
+        if let Some(app_name) = active_application_name {
+            self.insert_unique_application_names_if_needed(&app_name)?;
+        }
+
         Ok(self.last_frame_id)
     }
 
@@ -208,13 +201,13 @@ impl DatabaseManager {
         )?;
 
         if count == 0 {
-            self.insert_unique_application_names(app_name)?;
+            self.insert_unique_application_name(app_name)?;
         }
         Ok(())
     }
 
     // Method to insert unique application names
-    fn insert_unique_application_names(&self, app_name: &str) -> Result<()> {
+    fn insert_unique_application_name(&self, app_name: &str) -> Result<()> {
         self.conn.execute(
             "INSERT INTO unique_app_names (active_application_name) VALUES (?1)",
             params![app_name],
@@ -261,9 +254,9 @@ impl DatabaseManager {
 
     // Method to retrieve the file path of a video chunk by its index
     pub fn get_video_chunk_path(&self, index: i64) -> Result<Option<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT file_path FROM video_chunks WHERE id = ?1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT file_path FROM video_chunks WHERE id = ?1")?;
         let mut rows = stmt.query(params![index])?;
 
         if let Some(row) = rows.next()? {
@@ -313,16 +306,17 @@ impl DatabaseManager {
 
         let mut stmt = self.conn.prepare(&query)?;
 
-        let search_results = stmt.query_map(params_from_iter(params), |row| {
-            Ok(SearchResult {
-                frame_id: row.get(0)?,
-                full_text: row.get(1)?,
-                application_name: row.get(2)?,
-                timestamp: row.get(3)?,
-                file_path: row.get(4)?,
-                offset_index: row.get(5)?,
-            })
-        })?
+        let search_results = stmt
+            .query_map(params_from_iter(params), |row| {
+                Ok(SearchResult {
+                    frame_id: row.get(0)?,
+                    full_text: row.get(1)?,
+                    application_name: row.get(2)?,
+                    timestamp: row.get(3)?,
+                    file_path: row.get(4)?,
+                    offset_index: row.get(5)?,
+                })
+            })?
             .collect::<Result<Vec<_>, rusqlite::Error>>()?;
 
         Ok(search_results)
@@ -354,16 +348,17 @@ impl DatabaseManager {
         params.push(String::from(offset.to_string()).into());
 
         let mut stmt = self.conn.prepare(&query)?;
-        let results = stmt.query_map(params_from_iter(params), |row| {
-            Ok(SearchResult {
-                frame_id: row.get(0)?,
-                full_text: None, // Since the full text is not being fetched here
-                application_name: row.get(2)?,
-                timestamp: row.get(3)?,
-                file_path: row.get(4)?,
-                offset_index: row.get(5)?,
-            })
-        })?
+        let results = stmt
+            .query_map(params_from_iter(params), |row| {
+                Ok(SearchResult {
+                    frame_id: row.get(0)?,
+                    full_text: None, // Since the full text is not being fetched here
+                    application_name: row.get(2)?,
+                    timestamp: row.get(3)?,
+                    file_path: row.get(4)?,
+                    offset_index: row.get(5)?,
+                })
+            })?
             .collect::<Result<Vec<_>, rusqlite::Error>>()?;
 
         Ok(results)
@@ -371,12 +366,11 @@ impl DatabaseManager {
 
     // Method to get recent text context
     pub fn get_recent_text_context(&self) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT text FROM all_text ORDER BY frame_id DESC LIMIT ?1",
-        )?;
-        let texts = stmt.query_map(params![self.recent_frames_threshold], |row| {
-            Ok(row.get(0)?)
-        })?
+        let mut stmt = self
+            .conn
+            .prepare("SELECT text FROM all_text ORDER BY frame_id DESC LIMIT ?1")?;
+        let texts = stmt
+            .query_map(params![self.recent_frames_threshold], |row| Ok(row.get(0)?))?
             .collect::<Result<Vec<String>, rusqlite::Error>>()?;
 
         Ok(texts)
@@ -384,11 +378,8 @@ impl DatabaseManager {
 
     // Method to get the maximum frame ID
     pub fn get_max_frame(&self) -> Result<i64> {
-        self.conn.query_row(
-            "SELECT MAX(id) FROM frames",
-            [],
-            |row| row.get(0),
-        )
+        self.conn
+            .query_row("SELECT MAX(id) FROM frames", [], |row| row.get(0))
     }
 
     // Method to get the last accessible frame ID
@@ -404,12 +395,11 @@ impl DatabaseManager {
 
     // Method to get all unique application names
     pub fn get_all_application_names(&self) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT active_application_name FROM unique_app_names",
-        )?;
-        let app_names = stmt.query_map([], |row| {
-            Ok(row.get(0)?)
-        })?
+        let mut stmt = self
+            .conn
+            .prepare("SELECT active_application_name FROM unique_app_names")?;
+        let app_names = stmt
+            .query_map([], |row| Ok(row.get(0)?))?
             .collect::<Result<Vec<String>, rusqlite::Error>>()?;
 
         Ok(app_names)

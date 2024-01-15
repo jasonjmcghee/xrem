@@ -1,32 +1,29 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use crate::core::DatabaseManager;
+use core::{start_recording, CaptureHandles};
 use std::{
     fs,
     sync::{Arc, Mutex},
 };
-use tauri::{AppHandle, CustomMenuItem, LogicalPosition, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem};
+use tauri::{
+    AppHandle, CustomMenuItem, LogicalPosition, Manager, SystemTray, SystemTrayEvent,
+    SystemTrayMenu, SystemTrayMenuItem, SystemTrayMenuItemHandle,
+};
 use tokio::sync::oneshot;
-use core::{start_recording, CaptureHandles};
-use crate::core::DatabaseManager;
 
 mod core;
 mod server;
 
-fn start_server(app_handle: tauri::AppHandle) {
+fn start_server(local_data_dir: String, db: Arc<Mutex<Option<DatabaseManager>>>) {
     println!("starting server...");
-    let local_data_dir = app_handle.path_resolver().app_local_data_dir();
     let (tx, rx) = oneshot::channel();
-
-    if let Some(dir) = local_data_dir.clone() {
-        let path = dir.to_string_lossy().to_string();
-        if let Ok(()) = fs::create_dir_all(path.clone()) {
-            let path_clone = path.clone();
-            tokio::spawn(async move {
-                server::start_frame_server(tx, path_clone).await;
-            });
-        }
-    }
+    tokio::spawn(async move {
+        server::start_frame_server(tx, local_data_dir.to_string(), db.clone()).await;
+    });
+    // Wait for the server to start
+    // let _ = rx.await;
     println!("started server...");
 }
 
@@ -45,30 +42,40 @@ fn make_tray() -> SystemTray {
     return tray;
 }
 
-fn setup_db(app_handle: AppHandle, db: Arc<Mutex<Option<DatabaseManager>>>) {
+fn ensure_local_data_dir(app_handle: AppHandle) -> Result<String, ()> {
     let local_data_dir = app_handle.path_resolver().app_local_data_dir();
-    let mut db = db.lock().unwrap();
     if let Some(dir) = local_data_dir.clone() {
         let path = dir.to_string_lossy().to_string();
-        let db_ = DatabaseManager::new(&format!("{}/db.sqlite", path)).unwrap();
-        *db = Some(db_);
+        if let Ok(()) = fs::create_dir_all(path.clone()) {
+            return Ok(path);
+        }
     }
+    Err(())
+}
+
+fn setup_db(local_data_dir: String, db: Arc<Mutex<Option<DatabaseManager>>>) {
+    let mut db = db.lock().unwrap();
+    let db_ = DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir)).unwrap();
+    *db = Some(db_);
 }
 
 #[tokio::main]
 async fn main() {
     println!("starting app...");
-    // Wait for the server to start
-    // let _ = rx.await;
-
     let is_capturing = Arc::new(Mutex::new(false));
     let handles: Arc<Mutex<Option<CaptureHandles>>> = Arc::new(Mutex::new(None));
     let db: Arc<Mutex<Option<DatabaseManager>>> = Arc::new(Mutex::new(None));
 
+    let db_setup_ref = db.clone();
+    let db_system_tray_ref = db.clone();
+
     tauri::Builder::default()
-        .setup(|app| {
-            start_server(app.app_handle());
-            setup_db(app.app_handle(), db.clone());
+        .setup(move |app| {
+            let path = ensure_local_data_dir(app.app_handle()).unwrap_or_else(|_| {
+                panic!("Failed to create local data dir");
+            });
+            setup_db(path.clone(), db_setup_ref.clone());
+            start_server(path.clone(), db_setup_ref.clone());
             Ok(())
         })
         .on_window_event(|event| match event.event() {
@@ -80,76 +87,26 @@ async fn main() {
         })
         .system_tray(make_tray())
         .on_system_tray_event({
+            let db = db_system_tray_ref.clone();
             move |app, event| match event {
                 SystemTrayEvent::MenuItemClick { id, .. } => {
-                    // get a handle to the clicked menu item
-                    // note that `tray_handle` can be called anywhere,
-                    // just get an `AppHandle` instance with `app.handle()` on the setup hook
-                    // and move it to another function or thread
-
-                    let mut is_capturing = is_capturing.lock().unwrap();
-                    let mut handles = handles.lock().unwrap();
-
                     let item_handle = app.tray_handle().get_item(&id);
                     match id.as_str() {
-                        "quit" => {
-                            std::process::exit(0);
-                        }
+                        "quit" => std::process::exit(0),
                         "toggle_recording" => {
-                            let local_data_dir = app.path_resolver().app_local_data_dir();
-
-                            if let Some(dir) = local_data_dir.clone() {
-                                if *is_capturing {
-                                    if let Some(ref mut handles) = *handles {
-                                        handles.stop_recording()
-                                    }
-                                    *is_capturing = false;
-                                    item_handle.set_title("Start Recording").unwrap();
-                                } else {
-                                    let path = dir.to_string_lossy().to_string();
-                                    *handles = Some(start_recording(path, db));
-                                    *is_capturing = true;
-                                    item_handle.set_title("Stop Recording").unwrap();
-                                }
-                            }
+                            toggle_recording(
+                                app,
+                                db.clone(),
+                                is_capturing.clone(),
+                                handles.clone(),
+                                &item_handle,
+                            );
                         }
                         "toggle_search" => {
-                            let search = app.get_window("search").unwrap();
-                            if search.is_visible().unwrap() {
-                                search.hide();
-                                item_handle.set_title("Open Search").unwrap();
-                            } else if let Some(monitor) = search.current_monitor().unwrap() {
-                                let timeline = app.get_window("timeline").unwrap();
-                                if timeline.is_visible().unwrap() {
-                                    timeline.hide();
-                                    item_handle.set_title("Open Timeline").unwrap();
-                                }
-                                let size = monitor.size();
-                                let scale_factor = monitor.scale_factor();
-                                search.set_size(size.to_logical::<u32>(scale_factor));
-                                search.set_position(LogicalPosition::new(0.0, 0.0));
-                                search.show();
-                                item_handle.set_title("Close Search").unwrap();
-                            }
+                            toggle_search(app, &item_handle);
                         }
                         "toggle_timeline" => {
-                            let timeline = app.get_window("timeline").unwrap();
-                            if timeline.is_visible().unwrap() {
-                                timeline.hide();
-                                item_handle.set_title("Open Timeline").unwrap();
-                            } else if let Some(monitor) = timeline.current_monitor().unwrap() {
-                                let search = app.get_window("search").unwrap();
-                                if search.is_visible().unwrap() {
-                                    search.hide();
-                                    item_handle.set_title("Open Timeline").unwrap();
-                                }
-                                let size = monitor.size();
-                                let scale_factor = monitor.scale_factor();
-                                timeline.set_size(size.to_logical::<u32>(scale_factor));
-                                timeline.set_position(LogicalPosition::new(0.0, 0.0));
-                                timeline.show();
-                                item_handle.set_title("Close Timeline").unwrap();
-                            }
+                            toggle_timeline(app, item_handle);
                         }
                         _ => {}
                     }
@@ -159,4 +116,110 @@ async fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn toggle_timeline(app: &AppHandle, item_handle: SystemTrayMenuItemHandle) -> tauri::Result<()> {
+    let timeline = app.get_window("timeline").unwrap();
+    if !hide_timeline(app).unwrap_or(false) {
+        if let Some(monitor) = timeline.current_monitor().unwrap() {
+            hide_search(app)?;
+            let size = monitor.size();
+            let scale_factor = monitor.scale_factor();
+            timeline.set_size(size.to_logical::<u32>(scale_factor))?;
+            timeline.set_position(LogicalPosition::new(0.0, 0.0))?;
+            timeline.show()?;
+            item_handle.set_title("Close Timeline").unwrap();
+        }
+    }
+    Ok(())
+}
+
+fn toggle_search(app: &AppHandle, item_handle: &SystemTrayMenuItemHandle) -> tauri::Result<()> {
+    // If search is visible, hide it, otherwise, show it and hide everything else
+    if !hide_search(app).unwrap_or(false) {
+        let search = app.get_window("search").unwrap();
+        if let Some(monitor) = search.current_monitor().unwrap() {
+            hide_timeline(app)?;
+            let size = monitor.size();
+            let scale_factor = monitor.scale_factor();
+            search.set_size(size.to_logical::<u32>(scale_factor))?;
+            search.set_position(LogicalPosition::new(0.0, 0.0))?;
+            search.show()?;
+            item_handle.set_title("Close Search").unwrap();
+        }
+    }
+    Ok(())
+}
+
+fn hide_search(app: &AppHandle) -> tauri::Result<bool> {
+    let search = app.get_window("search").unwrap();
+    if search.is_visible().unwrap() {
+        search.hide()?;
+        app.tray_handle()
+            .get_item("toggle_search")
+            .set_title("Open Search")
+            .unwrap();
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn hide_timeline(app: &AppHandle) -> tauri::Result<bool> {
+    let timeline = app.get_window("timeline").unwrap();
+    if timeline.is_visible().unwrap() {
+        timeline.hide()?;
+        app.tray_handle()
+            .get_item("toggle_timeline")
+            .set_title("Open Timeline")
+            .unwrap();
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn stop_recording(
+    app: &AppHandle,
+    is_capturing: Arc<Mutex<bool>>,
+    handles: Arc<Mutex<Option<CaptureHandles>>>,
+) -> tauri::Result<bool> {
+    let mut is_capturing = is_capturing.lock().unwrap();
+    let mut handles = handles.lock().unwrap();
+    if *is_capturing {
+        if let Some(ref mut handles) = *handles {
+            handles.stop_recording()
+        }
+        *is_capturing = false;
+        app.tray_handle()
+            .get_item("toggle_recording")
+            .set_title("Start Recording")
+            .unwrap();
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn toggle_recording(
+    app: &AppHandle,
+    db: Arc<Mutex<Option<DatabaseManager>>>,
+    is_capturing: Arc<Mutex<bool>>,
+    handles: Arc<Mutex<Option<CaptureHandles>>>,
+    item_handle: &SystemTrayMenuItemHandle,
+) -> tauri::Result<()> {
+    if !stop_recording(app, is_capturing.clone(), handles.clone()).unwrap_or(false) {
+        hide_timeline(app)?;
+        hide_search(app)?;
+
+        let local_data_dir = app.path_resolver().app_local_data_dir();
+        if let Some(dir) = local_data_dir.clone() {
+            let path = dir.to_string_lossy().to_string();
+
+            let mut is_capturing = is_capturing.lock().unwrap();
+            let mut handles = handles.lock().unwrap();
+            *handles = Some(start_recording(path, db));
+            *is_capturing = true;
+            item_handle.set_title("Stop Recording").unwrap();
+        }
+    }
+
+    Ok(())
 }

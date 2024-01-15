@@ -1,3 +1,4 @@
+use crate::core::DatabaseManager;
 use chrono::Utc;
 use image::DynamicImage;
 use rusty_tesseract::{image_to_string, Args, Image};
@@ -11,7 +12,6 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 use threadpool::ThreadPool;
-use crate::core::DatabaseManager;
 
 use super::embed;
 
@@ -42,7 +42,10 @@ impl CaptureHandles {
     }
 }
 
-pub fn start_recording(local_data_dir: String, db: Arc<Mutex<Option<DatabaseManager>>>) -> CaptureHandles {
+pub fn start_recording(
+    local_data_dir: String,
+    db: Arc<Mutex<Option<DatabaseManager>>>,
+) -> CaptureHandles {
     let config_path = "models/gte-small/config.json";
     let tokenizer_path = "models/gte-small/tokenizer.json";
     let weights_path = "models/gte-small/model.safetensors";
@@ -60,19 +63,21 @@ pub fn start_recording(local_data_dir: String, db: Arc<Mutex<Option<DatabaseMana
 
     let local_data_dir_capture_handle = local_data_dir.clone();
 
+    let db_capture_ref = db.clone();
     let capture_handle = thread::spawn(move || {
         capture_screenshots(
             buffer_clone,
             &ocr_pool,
             control_receiver,
             local_data_dir_capture_handle,
-            db,
+            db_capture_ref,
         )
         .expect("Error capturing screenshots");
     });
 
     let local_data_dir_stream_handle = local_data_dir.clone();
 
+    let db_stream_ref = db.clone();
     let stream_handle = thread::spawn(move || {
         // Main thread for processing frames
         let (buffer, cvar) = &*frame_buffer;
@@ -84,7 +89,11 @@ pub fn start_recording(local_data_dir: String, db: Arc<Mutex<Option<DatabaseMana
 
             // Drain frames and process with FFmpeg
             let frames_to_process = frames.drain(..).collect::<Vec<_>>();
-            stream_to_ffmpeg(frames_to_process, local_data_dir_stream_handle.clone(), db.clone());
+            stream_to_ffmpeg(
+                frames_to_process,
+                local_data_dir_stream_handle.clone(),
+                db_stream_ref.clone(),
+            );
         }
     });
 
@@ -107,6 +116,7 @@ fn capture_screenshots(
     let mut is_paused = false;
     let local_data_dir_clone = local_data_dir.clone();
 
+    let db_process_ref = db.clone();
     loop {
         // Check for control messages
         if let Ok(message) = control_receiver.try_recv() {
@@ -115,7 +125,11 @@ fn capture_screenshots(
                 ControlMessage::Resume => is_paused = false,
                 ControlMessage::Stop => {
                     // Process the frames
-                    process_remaining_frames(&frame_buffer, local_data_dir_clone, db);
+                    process_remaining_frames(
+                        &frame_buffer,
+                        local_data_dir_clone,
+                        db_process_ref.clone(),
+                    );
                     return Ok(());
                 }
             }
@@ -130,8 +144,13 @@ fn capture_screenshots(
         let buffer = screen.capture()?;
         let image = DynamicImage::ImageRgba8(buffer.clone());
 
-        let frame_id = { db.lock()?.as_mut().unwrap().insert_frame(None)? };
+        let db_frame_id_ref = db.clone();
+        let frame_id = {
+            let mut db_clone = db_frame_id_ref.lock().unwrap();
+            db_clone.as_mut().unwrap().insert_frame(None)?
+        };
 
+        let db_ocr_ref = db.clone();
         // Send image to OCR thread pool
         let image_clone = image.clone();
         ocr_pool.execute(move || {
@@ -140,7 +159,12 @@ fn capture_screenshots(
                     // Embed the recognized text!
                     // let embeddings = embed::generate_embeddings(&result);
                     // println!("Embeddings length: {}", embeddings.len);
-                    db.lock().unwrap().as_mut().unwrap().insert_text_for_frame(frame_id, &result)
+                    db_ocr_ref
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .unwrap()
+                        .insert_text_for_frame(frame_id, &result)
                         .expect(&format!("Failed to insert text for frame: {}", frame_id));
                     result
                 }
@@ -177,7 +201,11 @@ fn perform_ocr(dynamic_image: &DynamicImage) -> Result<String, Box<dyn std::erro
     Ok(text)
 }
 
-fn stream_to_ffmpeg(frames: Vec<DynamicImage>, local_data_dir: String, db: Arc<Mutex<Option<DatabaseManager>>>) {
+fn stream_to_ffmpeg(
+    frames: Vec<DynamicImage>,
+    local_data_dir: String,
+    db: Arc<Mutex<Option<DatabaseManager>>>,
+) {
     let encode_pool = ThreadPool::new(IMAGE_ENCODE_THREADS); // Define NUM_ENCODE_THREADS based on your CPU
     print!("getting ready to stream..");
     let time = Utc::now();
@@ -208,7 +236,11 @@ fn stream_to_ffmpeg(frames: Vec<DynamicImage>, local_data_dir: String, db: Arc<M
         .expect("Failed to start FFmpeg");
 
     let _ = {
-        db.lock().unwrap().as_mut().unwrap().start_new_video_chunk(&output_name)
+        db.lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .start_new_video_chunk(&output_name)
             .expect("Failed to start a new video chunk")
     };
 
@@ -265,6 +297,6 @@ fn process_remaining_frames(
 
     if !frames.is_empty() {
         let frames_to_process = frames.drain(..).collect::<Vec<_>>();
-        stream_to_ffmpeg(frames_to_process, local_data_dir_clone, db);
+        stream_to_ffmpeg(frames_to_process, local_data_dir_clone, db.clone());
     }
 }

@@ -3,7 +3,6 @@ use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, HiddenAct, DTYPE};
 use lazy_static::lazy_static;
 
-
 use std::sync::Mutex;
 use tokenizers::{PaddingParams, Tokenizer};
 
