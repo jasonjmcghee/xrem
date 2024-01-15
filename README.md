@@ -16,11 +16,14 @@ Currently implements, in a parallel / non-blocking way:
 - click the status icon and choose to start / stop recording
 - screenshot capture every 2 seconds
 - OCR at capture time
-- calculate text embedding (rem doesn't have this yet lol)
+- calculate text embedding (rem doesn't have this yet lol, and this is commented out anyway for now, but it works)
 - stream to mp4 without writing pngs to disk
 - basic tray icon + menu
 - options which open svelte-based windows of future functionality
-- efficient timeline seeking of a single static video file (no db layer yet)
+- efficient timeline seeking of a recorded data (with front-end)
+
+NOTE: 
+- NO CACHING YET (this is vital for fast seeking between video files, currently big delay when swapping chunks)
 
 (more recent screenshot of tray - still using default tauri logo)
 
