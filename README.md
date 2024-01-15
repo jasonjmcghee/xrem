@@ -20,10 +20,16 @@ Currently implements, in a parallel / non-blocking way:
 - stream to mp4 without writing pngs to disk
 - basic tray icon + menu
 - options which open svelte-based windows of future functionality
+- efficient timeline seeking of a single static video file (no db layer yet)
 
 (more recent screenshot of tray - still using default tauri logo)
 
-<img width="156" alt="image" src="https://github.com/jasonjmcghee/xrem/assets/1522149/364dfe1f-ba6c-4cd5-b4ab-3ebc6bef168a">
+<img width="146" alt="image" src="https://github.com/jasonjmcghee/xrem/assets/1522149/34e140ff-b047-4160-9947-2d30824210e4">
+
+## More recent timeline seeking demo
+
+https://github.com/jasonjmcghee/xrem/assets/1522149/4d551500-c905-453c-b35b-83ca969c5159
+
 
 ## First Demo of basic poc:
 
