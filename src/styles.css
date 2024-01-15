@@ -20,7 +20,7 @@ body {
   justify-content: center;
   align-items: center;
   overflow: hidden;
-  overscroll-behavior-x: contain;
+  overscroll-behavior-x: contain !important;
 }
 
 .container {

@@ -1,6 +1,6 @@
 <script>
     import { onMount } from 'svelte';
-    import { pan } from 'svelte-gestures';
+    import { invoke } from '@tauri-apps/api/tauri';
 
     let frameNumber = 0;
     let swipePosition = 0;
@@ -8,15 +8,21 @@
     let debounceTimer;
 
     function debounce(func, delay) {
+        if (imageSrc == "") {
+            return function(...args) {
+                func.apply(this, args);
+            };
+        }
         return function(...args) {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => func.apply(this, args), delay);
         };
     }
 
-    const loadImage = debounce(() => {
-        imageSrc = `http://localhost:3030/get_frame/${frameNumber}`;
-        console.log(imageSrc);
+    const loadImage = debounce(async () => {
+        const binaryData = await (await fetch(`http://localhost:3030/get_frame/${frameNumber}`)).arrayBuffer();
+        const blob = new Blob([new Uint8Array(binaryData)], { type: 'image/png' });
+        imageSrc = URL.createObjectURL(blob);
     }, 100);
 
     function updateFrame() {

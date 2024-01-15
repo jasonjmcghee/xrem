@@ -94,16 +94,16 @@ async fn main() {
 
                             if let Some(dir) = local_data_dir.clone() {
                                 if *is_capturing {
-                                    item_handle.set_title("Start Recording").unwrap();
                                     if let Some(ref mut handles) = *handles {
                                         handles.stop_recording()
                                     }
                                     *is_capturing = false;
+                                    item_handle.set_title("Start Recording").unwrap();
                                 } else {
-                                    item_handle.set_title("Stop Recording").unwrap();
                                     let path = dir.to_string_lossy().to_string();
                                     *handles = Some(start_recording(path));
                                     *is_capturing = true;
+                                    item_handle.set_title("Stop Recording").unwrap();
                                 }
                             }
                         }
@@ -111,24 +111,38 @@ async fn main() {
                             let search = app.get_window("search").unwrap();
                             if search.is_visible().unwrap() {
                                 search.hide();
+                                item_handle.set_title("Open Search").unwrap();
                             } else if let Some(monitor) = search.current_monitor().unwrap() {
+                                let timeline = app.get_window("timeline").unwrap();
+                                if timeline.is_visible().unwrap() {
+                                    timeline.hide();
+                                    item_handle.set_title("Open Timeline").unwrap();
+                                }
                                 let size = monitor.size();
                                 let scale_factor = monitor.scale_factor();
                                 search.set_size(size.to_logical::<u32>(scale_factor));
                                 search.set_position(LogicalPosition::new(0.0, 0.0));
                                 search.show();
+                                item_handle.set_title("Close Search").unwrap();
                             }
                         }
                         "toggle_timeline" => {
                             let timeline = app.get_window("timeline").unwrap();
                             if timeline.is_visible().unwrap() {
                                 timeline.hide();
+                                item_handle.set_title("Open Timeline").unwrap();
                             } else if let Some(monitor) = timeline.current_monitor().unwrap() {
+                                let search = app.get_window("search").unwrap();
+                                if search.is_visible().unwrap() {
+                                    search.hide();
+                                    item_handle.set_title("Open Timeline").unwrap();
+                                }
                                 let size = monitor.size();
                                 let scale_factor = monitor.scale_factor();
                                 timeline.set_size(size.to_logical::<u32>(scale_factor));
                                 timeline.set_position(LogicalPosition::new(0.0, 0.0));
                                 timeline.show();
+                                item_handle.set_title("Close Timeline").unwrap();
                             }
                         }
                         _ => {}
