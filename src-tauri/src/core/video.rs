@@ -1,10 +1,8 @@
-use std::collections::BTreeSet;
-use ffmpeg_next::{
-    format, format::Pixel, media, software::scaling, util::frame::video::Video,
-};
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::sys::AVSEEK_FLAG_FRAME;
+use ffmpeg_next::{format, format::Pixel, media, software::scaling, util::frame::video::Video};
 use image::{DynamicImage, ImageBuffer, Rgb};
+use std::collections::BTreeSet;
 
 pub fn extract_frames_from_video(
     video_path: &str,
@@ -20,7 +18,8 @@ pub fn extract_frames_from_video(
         .ok_or(ffmpeg::Error::StreamNotFound)?;
     let video_stream_index = input_stream.index();
 
-    let context_decoder = ffmpeg::codec::context::Context::from_parameters(input_stream.parameters())?;
+    let context_decoder =
+        ffmpeg::codec::context::Context::from_parameters(input_stream.parameters())?;
     let mut decoder = context_decoder.decoder().video()?;
 
     let mut scaler = scaling::Context::get(
@@ -41,10 +40,7 @@ pub fn extract_frames_from_video(
 
     'frames: while let Some(&target_frame_number) = sorted_frame_numbers.iter().next() {
         // Seek to the nearest keyframe
-        seek_to_frame(
-            &mut ictx,
-            target_frame_number as i64,
-        )?;
+        seek_to_frame(&mut ictx, target_frame_number as i64)?;
 
         while frame_index <= target_frame_number {
             for (stream, packet) in ictx.packets() {
@@ -61,7 +57,7 @@ pub fn extract_frames_from_video(
                                 decoder.height() as u32,
                                 frame_data.to_vec(),
                             )
-                                .ok_or_else(|| ffmpeg::Error::InvalidData)?;
+                            .ok_or_else(|| ffmpeg::Error::InvalidData)?;
                             images.push(DynamicImage::ImageRgb8(img));
                             sorted_frame_numbers.remove(&target_frame_number);
                             if sorted_frame_numbers.is_empty() {
@@ -87,10 +83,10 @@ fn seek_to_frame(
     unsafe {
         let ret = ffmpeg::sys::avformat_seek_file(
             ictx.as_mut_ptr(),
-            -1, // Stream index -1 for default stream time base
-            i64::MIN, // Minimum timestamp
-            frame_number, // Target frame number as timestamp
-            i64::MAX, // Maximum timestamp
+            -1,                // Stream index -1 for default stream time base
+            i64::MIN,          // Minimum timestamp
+            frame_number,      // Target frame number as timestamp
+            i64::MAX,          // Maximum timestamp
             AVSEEK_FLAG_FRAME, // Seeking by frame number
         );
 
