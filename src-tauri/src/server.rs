@@ -1,4 +1,5 @@
 use std::{io::Cursor, sync::Arc};
+use std::sync::Mutex;
 
 use axum::{
     body::Bytes,
@@ -9,24 +10,23 @@ use axum::{
 };
 
 use image::ImageOutputFormat;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot};
 use tower_http::cors::CorsLayer;
 
-use crate::core::extract_frames_from_video;
+use crate::core::{DatabaseManager, extract_frames_from_video};
 
 #[derive(Clone)]
 struct AppState {
     local_data_dir: String,
+    db: Arc<Mutex<Option<DatabaseManager>>>,
 }
 
 async fn get_frame_handler(
     Path(frame_number): Path<i64>,
     State(state): State<Arc<AppState>>,
 ) -> (StatusCode, Bytes) {
-    let video_path = format!(
-        "{}/2024-01-14 03:52:34.529456 UTC.mp4",
-        state.local_data_dir
-    );
+    let video_path = state.db.lock().unwrap().as_mut().unwrap().get_video_chunk_path(frame_number)
+        .expect("Failed to get video chunk path").unwrap();
     match extract_frames_from_video(&video_path, &[frame_number]) {
         Ok(frames) => {
             if let Some(frame) = frames.into_iter().next() {
@@ -41,8 +41,8 @@ async fn get_frame_handler(
     (StatusCode::NOT_FOUND, Bytes::new())
 }
 
-pub async fn start_frame_server(tx: oneshot::Sender<()>, local_data_dir: String) {
-    let state = Arc::new(AppState { local_data_dir });
+pub async fn start_frame_server(tx: oneshot::Sender<()>, local_data_dir: String, db: Arc<Mutex<Option<DatabaseManager>>>) {
+    let state = Arc::new(AppState { local_data_dir, db });
 
     let app = Router::new()
         .route("/get_frame/:frame_number", get(get_frame_handler))

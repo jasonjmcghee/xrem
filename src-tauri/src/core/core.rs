@@ -11,6 +11,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 use threadpool::ThreadPool;
+use crate::core::DatabaseManager;
 
 use super::embed;
 
@@ -41,7 +42,7 @@ impl CaptureHandles {
     }
 }
 
-pub fn start_recording(local_data_dir: String) -> CaptureHandles {
+pub fn start_recording(local_data_dir: String, db: Arc<Mutex<Option<DatabaseManager>>>) -> CaptureHandles {
     let config_path = "models/gte-small/config.json";
     let tokenizer_path = "models/gte-small/tokenizer.json";
     let weights_path = "models/gte-small/model.safetensors";
@@ -65,6 +66,7 @@ pub fn start_recording(local_data_dir: String) -> CaptureHandles {
             &ocr_pool,
             control_receiver,
             local_data_dir_capture_handle,
+            db,
         )
         .expect("Error capturing screenshots");
     });
@@ -82,7 +84,7 @@ pub fn start_recording(local_data_dir: String) -> CaptureHandles {
 
             // Drain frames and process with FFmpeg
             let frames_to_process = frames.drain(..).collect::<Vec<_>>();
-            stream_to_ffmpeg(frames_to_process, local_data_dir_stream_handle.clone());
+            stream_to_ffmpeg(frames_to_process, local_data_dir_stream_handle.clone(), db.clone());
         }
     });
 
@@ -98,6 +100,7 @@ fn capture_screenshots(
     ocr_pool: &ThreadPool,
     control_receiver: mpsc::Receiver<ControlMessage>,
     local_data_dir: String,
+    db: Arc<Mutex<Option<DatabaseManager>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let screens = Screen::all()?;
     let screen = screens.first().unwrap();
@@ -112,7 +115,7 @@ fn capture_screenshots(
                 ControlMessage::Resume => is_paused = false,
                 ControlMessage::Stop => {
                     // Process the frames
-                    process_remaining_frames(&frame_buffer, local_data_dir_clone);
+                    process_remaining_frames(&frame_buffer, local_data_dir_clone, db);
                     return Ok(());
                 }
             }
@@ -127,6 +130,8 @@ fn capture_screenshots(
         let buffer = screen.capture()?;
         let image = DynamicImage::ImageRgba8(buffer.clone());
 
+        let frame_id = { db.lock()?.as_mut().unwrap().insert_frame(None)? };
+
         // Send image to OCR thread pool
         let image_clone = image.clone();
         ocr_pool.execute(move || {
@@ -135,6 +140,8 @@ fn capture_screenshots(
                     // Embed the recognized text!
                     // let embeddings = embed::generate_embeddings(&result);
                     // println!("Embeddings length: {}", embeddings.len);
+                    db.lock().unwrap().as_mut().unwrap().insert_text_for_frame(frame_id, &result)
+                        .expect(&format!("Failed to insert text for frame: {}", frame_id));
                     result
                 }
                 Err(e) => {
@@ -170,12 +177,12 @@ fn perform_ocr(dynamic_image: &DynamicImage) -> Result<String, Box<dyn std::erro
     Ok(text)
 }
 
-fn stream_to_ffmpeg(frames: Vec<DynamicImage>, local_data_dir: String) {
+fn stream_to_ffmpeg(frames: Vec<DynamicImage>, local_data_dir: String, db: Arc<Mutex<Option<DatabaseManager>>>) {
     let encode_pool = ThreadPool::new(IMAGE_ENCODE_THREADS); // Define NUM_ENCODE_THREADS based on your CPU
     print!("getting ready to stream..");
     let time = Utc::now();
     let local_data_dir_clone = local_data_dir.clone();
-    let output_name = format!("{}/{}.mp4", local_data_dir_clone, time);
+    let output_name = format!("{}/output-{}.mp4", local_data_dir_clone, time);
     let mut child = Command::new("ffmpeg")
         .args([
             "-f",
@@ -199,6 +206,11 @@ fn stream_to_ffmpeg(frames: Vec<DynamicImage>, local_data_dir: String) {
         .stdin(Stdio::piped())
         .spawn()
         .expect("Failed to start FFmpeg");
+
+    let _ = {
+        db.lock().unwrap().as_mut().unwrap().start_new_video_chunk(&output_name)
+            .expect("Failed to start a new video chunk")
+    };
 
     print!("opened stdin...");
     let mut stdin = child.stdin.take().expect("Failed to open stdin");
@@ -245,13 +257,14 @@ fn stream_to_ffmpeg(frames: Vec<DynamicImage>, local_data_dir: String) {
 fn process_remaining_frames(
     frame_buffer: &Arc<(Mutex<Vec<DynamicImage>>, Condvar)>,
     local_data_dir: String,
+    db: Arc<Mutex<Option<DatabaseManager>>>,
 ) {
     let local_data_dir_clone = local_data_dir.clone();
-    let (lock, _) = &**frame_buffer;
-    let mut frames = lock.lock().unwrap();
+    let (mutex, _) = &**frame_buffer;
+    let mut frames = mutex.lock().unwrap();
 
     if !frames.is_empty() {
         let frames_to_process = frames.drain(..).collect::<Vec<_>>();
-        stream_to_ffmpeg(frames_to_process, local_data_dir_clone);
+        stream_to_ffmpeg(frames_to_process, local_data_dir_clone, db);
     }
 }

@@ -5,16 +5,13 @@ use std::{
     fs,
     sync::{Arc, Mutex},
 };
-use tauri::{
-    CustomMenuItem, LogicalPosition, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu,
-    SystemTrayMenuItem,
-};
+use tauri::{AppHandle, CustomMenuItem, LogicalPosition, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem};
 use tokio::sync::oneshot;
 use core::{start_recording, CaptureHandles};
+use crate::core::DatabaseManager;
 
 mod core;
 mod server;
-
 
 fn start_server(app_handle: tauri::AppHandle) {
     println!("starting server...");
@@ -48,6 +45,16 @@ fn make_tray() -> SystemTray {
     return tray;
 }
 
+fn setup_db(app_handle: AppHandle, db: Arc<Mutex<Option<DatabaseManager>>>) {
+    let local_data_dir = app_handle.path_resolver().app_local_data_dir();
+    let mut db = db.lock().unwrap();
+    if let Some(dir) = local_data_dir.clone() {
+        let path = dir.to_string_lossy().to_string();
+        let db_ = DatabaseManager::new(&format!("{}/db.sqlite", path)).unwrap();
+        *db = Some(db_);
+    }
+}
+
 #[tokio::main]
 async fn main() {
     println!("starting app...");
@@ -56,10 +63,12 @@ async fn main() {
 
     let is_capturing = Arc::new(Mutex::new(false));
     let handles: Arc<Mutex<Option<CaptureHandles>>> = Arc::new(Mutex::new(None));
+    let db: Arc<Mutex<Option<DatabaseManager>>> = Arc::new(Mutex::new(None));
 
     tauri::Builder::default()
         .setup(|app| {
             start_server(app.app_handle());
+            setup_db(app.app_handle(), db.clone());
             Ok(())
         })
         .on_window_event(|event| match event.event() {
@@ -71,9 +80,6 @@ async fn main() {
         })
         .system_tray(make_tray())
         .on_system_tray_event({
-            let is_capturing = Arc::clone(&is_capturing);
-            let handles = Arc::clone(&handles);
-
             move |app, event| match event {
                 SystemTrayEvent::MenuItemClick { id, .. } => {
                     // get a handle to the clicked menu item
@@ -101,7 +107,7 @@ async fn main() {
                                     item_handle.set_title("Start Recording").unwrap();
                                 } else {
                                     let path = dir.to_string_lossy().to_string();
-                                    *handles = Some(start_recording(path));
+                                    *handles = Some(start_recording(path, db));
                                     *is_capturing = true;
                                     item_handle.set_title("Stop Recording").unwrap();
                                 }
