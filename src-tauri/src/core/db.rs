@@ -31,12 +31,12 @@ struct AllText {
 
 #[derive(Debug)]
 struct SearchResult {
-    frame_id: i64,
-    full_text: Option<String>,
-    application_name: Option<String>,
-    timestamp: NaiveDateTime,
-    file_path: String,
-    offset_index: i64,
+    pub frame_id: i64,
+    pub full_text: Option<String>,
+    pub application_name: Option<String>,
+    pub timestamp: NaiveDateTime,
+    pub file_path: String,
+    pub offset_index: i64,
 }
 
 // DatabaseManager struct to encapsulate database operations
@@ -270,10 +270,10 @@ impl DatabaseManager {
     // Method to perform a search based on app name and/or text
     pub fn search(
         &self,
-        app_name: Option<&str>,
         search_text: &str,
         limit: i64,
         offset: i64,
+        app_name: Option<&str>,
     ) -> Result<Vec<SearchResult>> {
         let mut query = String::from(
             "SELECT a.frame_id, a.text, f.active_application_name, f.timestamp, vc.file_path, f.offset_index
@@ -325,9 +325,9 @@ impl DatabaseManager {
     // Method to get recent results with an optional filter for application name
     pub fn get_recent_results(
         &self,
-        selected_filter_app: Option<&str>,
         limit: i64,
         offset: i64,
+        selected_filter_app: Option<&str>,
     ) -> Result<Vec<SearchResult>> {
         let mut query = String::from(
             "SELECT f.id, NULL, f.active_application_name, f.timestamp, vc.file_path, f.offset_index
