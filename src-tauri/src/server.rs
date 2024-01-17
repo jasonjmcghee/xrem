@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 use std::{io::Cursor, sync::Arc};
 
+use axum::extract::Query;
 use axum::{
     body::Bytes,
     extract::{Path, State},
@@ -8,9 +9,10 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use chrono::Utc;
 
 use image::ImageOutputFormat;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 use tower_http::cors::CorsLayer;
 
@@ -27,11 +29,23 @@ struct FrameInfo {
     max_frame: i64,
 }
 
+#[derive(Deserialize)]
+struct Pagination {
+    limit: i64,
+    offset: i64,
+}
+
+#[derive(Deserialize)]
+struct ImageParams {
+    thumbnail: bool,
+}
+
 // TODO: Optimize this to do chunk loading, instead of starting from scratch with the
 // frame every single time
 // TODO: Also, cache the frames in memory using an LRU cache
 async fn get_frame_handler(
     Path(frame_number): Path<i64>,
+    Query(query): Query<ImageParams>,
     State(state): State<Arc<AppState>>,
 ) -> (StatusCode, Bytes) {
     let db_video_ref = state.db.clone();
@@ -48,7 +62,15 @@ async fn get_frame_handler(
             Ok(frames) => {
                 if let Some(frame) = frames.into_iter().next() {
                     let mut cursor = Cursor::new(Vec::new());
-                    if frame.write_to(&mut cursor, ImageOutputFormat::Png).is_ok() {
+                    if query.thumbnail {
+                        if frame
+                            .thumbnail(800, 800)
+                            .write_to(&mut cursor, ImageOutputFormat::Png)
+                            .is_ok()
+                        {
+                            return (StatusCode::OK, Bytes::from(cursor.into_inner()));
+                        }
+                    } else if frame.write_to(&mut cursor, ImageOutputFormat::Png).is_ok() {
                         return (StatusCode::OK, Bytes::from(cursor.into_inner()));
                     }
                 }
@@ -72,6 +94,42 @@ async fn get_max_frame_handler(State(state): State<Arc<AppState>>) -> Json<Frame
     Json(FrameInfo { max_frame })
 }
 
+#[derive(Serialize)]
+struct Frame {
+    frame_number: i64,
+    timestamp: i64,
+}
+
+#[derive(Serialize)]
+struct PaginatedFrames {
+    data: Vec<Frame>,
+}
+
+async fn search_frames_handler(
+    Query(query): Query<Pagination>,
+    State(state): State<Arc<AppState>>,
+) -> Json<PaginatedFrames> {
+    let db_frames_ref = state.db.clone();
+    let results = {
+        let mut db_clone = db_frames_ref.lock().expect("Failed to acquire lock");
+        db_clone
+            .as_mut()
+            .unwrap()
+            .get_recent_results(query.limit, query.offset, None)
+            .expect("Failed to get max frame")
+    };
+    let mut data = Vec::new();
+    for frame in results {
+        let frame_number = frame.frame_id;
+        let timestamp = frame.timestamp;
+        data.push(Frame {
+            frame_number,
+            timestamp: timestamp.timestamp_millis(),
+        });
+    }
+    Json(PaginatedFrames { data })
+}
+
 pub async fn start_frame_server(
     tx: oneshot::Sender<()>,
     local_data_dir: String,
@@ -80,6 +138,7 @@ pub async fn start_frame_server(
     let state = Arc::new(AppState { local_data_dir, db });
 
     let app = Router::new()
+        .route("/frames", get(search_frames_handler))
         .route("/frames/max", get(get_max_frame_handler))
         .route("/frames/:frame_number", get(get_frame_handler))
         .layer(CorsLayer::permissive())

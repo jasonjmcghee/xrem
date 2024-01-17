@@ -93,8 +93,13 @@
         /* Your styling here */
         overflow: hidden;
         user-select: none;
+        position: relative;
     }
     img {
+        /*position: absolute;*/
+        top: 0;
+        left: 0;
+        z-index: 1000;
         /* Style for the image */
     }
 </style>

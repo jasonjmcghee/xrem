@@ -30,13 +30,13 @@ struct AllText {
 }
 
 #[derive(Debug)]
-struct SearchResult {
-    frame_id: i64,
-    full_text: Option<String>,
-    application_name: Option<String>,
-    timestamp: NaiveDateTime,
-    file_path: String,
-    offset_index: i64,
+pub struct SearchResult {
+    pub frame_id: i64,
+    pub full_text: Option<String>,
+    pub application_name: Option<String>,
+    pub timestamp: NaiveDateTime,
+    pub file_path: String,
+    pub offset_index: i64,
 }
 
 // DatabaseManager struct to encapsulate database operations
@@ -270,10 +270,10 @@ impl DatabaseManager {
     // Method to perform a search based on app name and/or text
     pub fn search(
         &self,
-        app_name: Option<&str>,
         search_text: &str,
         limit: i64,
         offset: i64,
+        app_name: Option<&str>,
     ) -> Result<Vec<SearchResult>> {
         let mut query = String::from(
             "SELECT a.frame_id, a.text, f.active_application_name, f.timestamp, vc.file_path, f.offset_index
@@ -325,9 +325,9 @@ impl DatabaseManager {
     // Method to get recent results with an optional filter for application name
     pub fn get_recent_results(
         &self,
-        selected_filter_app: Option<&str>,
         limit: i64,
         offset: i64,
+        selected_filter_app: Option<&str>,
     ) -> Result<Vec<SearchResult>> {
         let mut query = String::from(
             "SELECT f.id, NULL, f.active_application_name, f.timestamp, vc.file_path, f.offset_index
@@ -336,20 +336,35 @@ impl DatabaseManager {
         );
 
         let mut params: Vec<rusqlite::types::Value> = Vec::new();
+        let mut params_count = 1;
 
         if let Some(app_name) = selected_filter_app {
             query.push_str("JOIN unique_app_names uan ON uan.active_application_name = f.active_application_name ");
-            query.push_str("WHERE uan.active_application_name LIKE ?1 ");
+            query.push_str(
+                format!("WHERE uan.active_application_name LIKE ?{} ", params_count).as_str(),
+            );
             params.push(String::from(app_name).into());
+            // Added a param
+            params_count = params.len();
         }
 
-        query.push_str("ORDER BY f.timestamp DESC LIMIT ?2 OFFSET ?3");
+        query.push_str(
+            format!(
+                "ORDER BY f.timestamp DESC LIMIT ?{} OFFSET ?{}",
+                params_count,
+                params_count + 1
+            )
+            .as_str(),
+        );
         params.push(String::from(limit.to_string()).into());
         params.push(String::from(offset.to_string()).into());
+        // Update params count
+        params_count = params.len();
 
         let mut stmt = self.conn.prepare(&query)?;
+        let final_params = params_from_iter(params);
         let results = stmt
-            .query_map(params_from_iter(params), |row| {
+            .query_map(final_params, |row| {
                 Ok(SearchResult {
                     frame_id: row.get(0)?,
                     full_text: None, // Since the full text is not being fetched here
