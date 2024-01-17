@@ -1,18 +1,33 @@
 <script>
+    import {onMount} from "svelte";
+
     export let thumbnail;
-    export let appName;
+    export let frame_number;
     export let timestamp;
-    export let matchingText;
+    export let matching_text;
+
+    const loadImage = async () => {
+        const binaryData = await (await fetch(`http://localhost:3030/frames/${frame_number}?thumbnail=true`)).arrayBuffer();
+        const blob = new Blob([new Uint8Array(binaryData)], { type: 'image/png' });
+        thumbnail = URL.createObjectURL(blob);
+    };
+
+    onMount(() => {
+        loadImage();
+    })
 </script>
 
 <div class="thumbnail-card">
     <div class="top-line">
-        <div class="app-name">{appName}</div>
-        <div class="timestamp">{timestamp}</div>
+        <div class="timestamp">{new Date(timestamp).toLocaleString()}</div>
     </div>
-    <img src={thumbnail} alt={`Screenshot of ${appName}`} />
-    {#if matchingText}
-        <div class="matching-text">{matchingText}</div>
+    {#if thumbnail}
+        <img src={thumbnail} alt={`Screenshot`} />
+    {:else}
+        <div>Loading...</div>
+    {/if}
+    {#if matching_text}
+        <div class="matching-text">{matching_text}</div>
     {/if}
 </div>
 
@@ -20,11 +35,14 @@
 
     /* Thumbnail Card Styles */
     .thumbnail-card {
-        flex: 0 1 30%;
-        min-width: 250px;
-        height: auto;
+        display: flex;
+        width: 400px;
+        height: 300px;
         position: relative;
         margin-bottom: 2em;
+        max-width: 90vw;
+        justify-content: center;
+        align-items: center;
     }
 
     .thumbnail-card img {

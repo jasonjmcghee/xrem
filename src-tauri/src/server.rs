@@ -35,11 +35,17 @@ struct Pagination {
     offset: i64,
 }
 
+#[derive(Deserialize)]
+struct ImageParams {
+    thumbnail: bool,
+}
+
 // TODO: Optimize this to do chunk loading, instead of starting from scratch with the
 // frame every single time
 // TODO: Also, cache the frames in memory using an LRU cache
 async fn get_frame_handler(
     Path(frame_number): Path<i64>,
+    Query(query): Query<ImageParams>,
     State(state): State<Arc<AppState>>,
 ) -> (StatusCode, Bytes) {
     let db_video_ref = state.db.clone();
@@ -56,7 +62,15 @@ async fn get_frame_handler(
             Ok(frames) => {
                 if let Some(frame) = frames.into_iter().next() {
                     let mut cursor = Cursor::new(Vec::new());
-                    if frame.write_to(&mut cursor, ImageOutputFormat::Png).is_ok() {
+                    if query.thumbnail {
+                        if frame
+                            .thumbnail(800, 800)
+                            .write_to(&mut cursor, ImageOutputFormat::Png)
+                            .is_ok()
+                        {
+                            return (StatusCode::OK, Bytes::from(cursor.into_inner()));
+                        }
+                    } else if frame.write_to(&mut cursor, ImageOutputFormat::Png).is_ok() {
                         return (StatusCode::OK, Bytes::from(cursor.into_inner()));
                     }
                 }
@@ -83,7 +97,6 @@ async fn get_max_frame_handler(State(state): State<Arc<AppState>>) -> Json<Frame
 #[derive(Serialize)]
 struct Frame {
     frame_number: i64,
-    thumbnail: Vec<u8>,
     timestamp: i64,
 }
 
@@ -98,7 +111,7 @@ async fn search_frames_handler(
 ) -> Json<PaginatedFrames> {
     let db_frames_ref = state.db.clone();
     let results = {
-        let mut db_clone = db_frames_ref.lock().unwrap();
+        let mut db_clone = db_frames_ref.lock().expect("Failed to acquire lock");
         db_clone
             .as_mut()
             .unwrap()
@@ -109,25 +122,10 @@ async fn search_frames_handler(
     for frame in results {
         let frame_number = frame.frame_id;
         let timestamp = frame.timestamp;
-        // TODO: We should optimize this to do chunk loading, instead of starting from scratch
-        match extract_frames_from_video(&frame.file_path, &[frame.offset_index]) {
-            Ok(frames) => {
-                for f in frames {
-                    let mut cursor = Cursor::new(Vec::new());
-                    if f.thumbnail(600, 600)
-                        .write_to(&mut cursor, ImageOutputFormat::Png)
-                        .is_ok()
-                    {
-                        data.push(Frame {
-                            frame_number,
-                            thumbnail: cursor.into_inner(),
-                            timestamp: timestamp.timestamp_millis(),
-                        });
-                    }
-                }
-            }
-            _ => {}
-        }
+        data.push(Frame {
+            frame_number,
+            timestamp: timestamp.timestamp_millis(),
+        });
     }
     Json(PaginatedFrames { data })
 }

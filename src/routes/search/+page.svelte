@@ -5,7 +5,7 @@
     let searchTerm = '';
     let frames = [];
     let offset = 0;
-    const limit = 20;
+    const limit = 3;
     let loading = false;
     let endOfData = false;
 
@@ -13,12 +13,16 @@
         if (loading || endOfData) return;
         loading = true;
         fetch(`http://localhost:3030/frames?limit=${limit}&offset=${offset}`)
-            .then(response => response.json())
+            .then(async response => (await response.json()).data)
             .then(data => {
-                if (data.length < limit) endOfData = true;
                 frames = [...frames, ...data];
                 offset += data.length;
                 loading = false;
+                if (data.length < limit) {
+                    endOfData = true;
+                } else {
+                    onScroll();
+                }
             })
             .catch(error => {
                 console.error('Error fetching data:', error);
@@ -36,6 +40,9 @@
 
     // Infinite scrolling logic
     function onScroll() {
+        if (endOfData) {
+            return;
+        }
         const scrollY = window.scrollY;
         const visible = document.documentElement.clientHeight;
         const pageHeight = document.documentElement.scrollHeight;
@@ -60,7 +67,7 @@
     {/each}
 </div>
 {#if loading}
-    <div>Loading more...</div>
+    <div class="loading-more">Loading more...</div>
 {/if}
 
 <style>
@@ -70,13 +77,13 @@
         display: flex;
         flex-direction: row;
         flex-wrap: wrap;
-        justify-content: space-between;
+        justify-content: space-evenly;
         align-items: flex-start;
-        gap: 10vw 4.5vw;
-        padding: 0;
-        margin: 3.5vh auto;
-        width: 95%;
-        max-width: 90vw;
+        gap: 50px 30px;
+        margin: auto;
+        padding: 120px 0 0;
+        height: auto;
+        overflow: auto;
     }
 
     /* Loading More Indicator */
@@ -84,33 +91,5 @@
         text-align: center;
         color: #282A2E;
         font-size: 1rem;
-    }
-
-    /* Responsive Design */
-    @media (max-width: 768px) {
-        .frames-container {
-            gap: 5vw 2.5vw;
-        }
-
-        .thumbnail-card {
-            flex-basis: 45%;
-        }
-
-        .search-bar {
-            padding: 1em;
-            font-size: 1rem;
-        }
-    }
-
-    @media (max-width: 480px) {
-        .frames-container {
-            flex-direction: column;
-            align-items: center;
-            gap: 3vh 0;
-        }
-
-        .thumbnail-card {
-            flex-basis: 90%;
-        }
     }
 </style>
