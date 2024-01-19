@@ -76,6 +76,58 @@ pub fn extract_frames_from_video(
     Ok(images)
 }
 
+pub fn extract_all_frames_from_video(video_path: &str) -> Result<Vec<DynamicImage>, ffmpeg::Error> {
+    ffmpeg::init()?;
+
+    let mut images = Vec::new();
+    let mut ictx = format::input(&video_path)?;
+    let input_stream = ictx
+        .streams()
+        .best(media::Type::Video)
+        .ok_or(ffmpeg::Error::StreamNotFound)?;
+    let video_stream_index = input_stream.index();
+
+    let context_decoder =
+        ffmpeg::codec::context::Context::from_parameters(input_stream.parameters())?;
+    let mut decoder = context_decoder.decoder().video()?;
+
+    let mut scaler = scaling::Context::get(
+        decoder.format(),
+        decoder.width(),
+        decoder.height(),
+        Pixel::RGB24,
+        decoder.width(),
+        decoder.height(),
+        scaling::Flags::BILINEAR,
+    )?;
+
+    let now = std::time::Instant::now();
+    println!("All frames: Starting at {}ms", now.elapsed().as_millis());
+
+    for (stream, packet) in ictx.packets() {
+        if stream.index() == video_stream_index {
+            decoder.send_packet(&packet)?;
+            let mut decoded = Video::empty();
+            while decoder.receive_frame(&mut decoded).is_ok() {
+                let mut rgb_frame = Video::empty();
+                scaler.run(&decoded, &mut rgb_frame)?;
+                let frame_data = rgb_frame.data(0);
+                let img = ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(
+                    decoder.width() as u32,
+                    decoder.height() as u32,
+                    frame_data.to_vec(),
+                )
+                .ok_or_else(|| ffmpeg::Error::InvalidData)?;
+                images.push(DynamicImage::ImageRgb8(img));
+            }
+        }
+    }
+
+    println!("All frames: Done in {}ms", now.elapsed().as_millis());
+
+    Ok(images)
+}
+
 fn seek_to_frame(
     ictx: &mut format::context::Input,
     frame_number: i64,

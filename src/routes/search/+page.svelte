@@ -12,7 +12,7 @@
     async function fetchFrames() {
         if (loading || endOfData) return;
         loading = true;
-        fetch(`http://localhost:3030/frames?limit=${limit}&offset=${offset}`)
+        fetch(`http://localhost:3030/frames?limit=${limit}&offset=${offset}&search=${searchTerm}`)
             .then(async response => (await response.json()).data)
             .then(data => {
                 frames = [...frames, ...data];

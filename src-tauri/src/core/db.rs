@@ -283,11 +283,16 @@ impl DatabaseManager {
         );
 
         let mut params: Vec<rusqlite::types::Value> = Vec::new();
+        let mut params_count = 1;
 
         if let Some(app_name) = app_name {
             query.push_str("JOIN unique_app_names uan ON uan.active_application_name = f.active_application_name ");
-            query.push_str("WHERE uan.active_application_name LIKE ?1 ");
+            query.push_str(
+                format!("WHERE uan.active_application_name LIKE ?{} ", params_count).as_str(),
+            );
             params.push(String::from(app_name).into());
+            // Update params count
+            params_count = params.len() + 1;
         }
 
         if !search_text.is_empty() {
@@ -296,13 +301,24 @@ impl DatabaseManager {
             } else {
                 query.push_str("WHERE ");
             }
-            query.push_str("a.text MATCH ?2 ");
+            query.push_str(format!("a.text MATCH ?{} ", params_count).as_str());
             params.push(String::from(search_text).into());
+            // Update params count
+            params_count = params.len() + 1;
         }
 
-        query.push_str("ORDER BY f.timestamp DESC LIMIT ?3 OFFSET ?4");
+        query.push_str(
+            format!(
+                "ORDER BY f.timestamp DESC LIMIT ?{} OFFSET ?{}",
+                params_count,
+                params_count + 1
+            )
+            .as_str(),
+        );
         params.push(String::from(limit.to_string()).into());
         params.push(String::from(offset.to_string()).into());
+        // Update params count
+        params_count = params.len() + 1;
 
         let mut stmt = self.conn.prepare(&query)?;
 
@@ -345,7 +361,7 @@ impl DatabaseManager {
             );
             params.push(String::from(app_name).into());
             // Added a param
-            params_count = params.len();
+            params_count = params.len() + 1;
         }
 
         query.push_str(
@@ -359,7 +375,7 @@ impl DatabaseManager {
         params.push(String::from(limit.to_string()).into());
         params.push(String::from(offset.to_string()).into());
         // Update params count
-        params_count = params.len();
+        params_count = params.len() + 1;
 
         let mut stmt = self.conn.prepare(&query)?;
         let final_params = params_from_iter(params);

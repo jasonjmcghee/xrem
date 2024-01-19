@@ -31,13 +31,14 @@ struct FrameInfo {
 
 #[derive(Deserialize)]
 struct Pagination {
+    search: Option<String>,
     limit: i64,
     offset: i64,
 }
 
 #[derive(Deserialize)]
 struct ImageParams {
-    thumbnail: bool,
+    thumbnail: Option<bool>,
 }
 
 // TODO: Optimize this to do chunk loading, instead of starting from scratch with the
@@ -62,7 +63,7 @@ async fn get_frame_handler(
             Ok(frames) => {
                 if let Some(frame) = frames.into_iter().next() {
                     let mut cursor = Cursor::new(Vec::new());
-                    if query.thumbnail {
+                    if query.thumbnail.unwrap_or(false) {
                         if frame
                             .thumbnail(800, 800)
                             .write_to(&mut cursor, ImageOutputFormat::Png)
@@ -112,11 +113,21 @@ async fn search_frames_handler(
     let db_frames_ref = state.db.clone();
     let results = {
         let mut db_clone = db_frames_ref.lock().expect("Failed to acquire lock");
-        db_clone
-            .as_mut()
-            .unwrap()
-            .get_recent_results(query.limit, query.offset, None)
-            .expect("Failed to get max frame")
+
+        let search = query.search.unwrap_or("".to_string());
+        if search.is_empty() {
+            db_clone
+                .as_mut()
+                .unwrap()
+                .get_recent_results(query.limit, query.offset, None)
+                .expect("Failed to get recent results")
+        } else {
+            db_clone
+                .as_mut()
+                .unwrap()
+                .search(&search, query.limit, query.offset, None)
+                .expect("Failed to get search results")
+        }
     };
     let mut data = Vec::new();
     for frame in results {
