@@ -22,6 +22,7 @@ Currently implements, in a parallel / non-blocking way:
 - basic tray icon + menu
 - options which open svelte-based windows of future functionality
 - efficient timeline seeking of a recorded data (with front-end)
+- navigate to timeline frame by clicking search result
 
 NOTE: 
 - NO CACHING YET (this is vital for fast seeking between video files, currently big delay when swapping chunks)
@@ -29,6 +30,11 @@ NOTE:
 (more recent screenshot of tray - still using default tauri logo)
 
 <img width="146" alt="image" src="https://github.com/jasonjmcghee/xrem/assets/1522149/34e140ff-b047-4160-9947-2d30824210e4">
+
+## Recent "search" (recent items) functionality
+
+https://github.com/jasonjmcghee/xrem/assets/1522149/4c8dbff9-4a85-47d1-a0a7-51059f624659
+
 
 ## More recent timeline seeking demo
 
