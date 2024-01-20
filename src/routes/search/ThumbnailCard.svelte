@@ -6,6 +6,10 @@
     export let timestamp;
     export let matching_text;
 
+    function goToFrameViewerWithFrame(frameNumber) {
+        window.location.href = `/timeline#frame${frameNumber}`;
+    }
+
     const loadImage = async () => {
         const binaryData = await (await fetch(`http://localhost:3030/frames/${frame_number}?thumbnail=true`)).arrayBuffer();
         const blob = new Blob([new Uint8Array(binaryData)], { type: 'image/png' });
@@ -17,7 +21,9 @@
     })
 </script>
 
-<div class="thumbnail-card">
+<div class="thumbnail-card" on:click={() => {
+    goToFrameViewerWithFrame(frame_number);
+}}>
     <div class="top-line">
         <div class="timestamp">{new Date(timestamp).toLocaleString()}</div>
     </div>
@@ -36,6 +42,8 @@
     /* Thumbnail Card Styles */
     .thumbnail-card {
         display: flex;
+        flex-direction: column;
+        gap: 12px;
         width: 400px;
         height: 300px;
         position: relative;
@@ -43,20 +51,25 @@
         max-width: 90vw;
         justify-content: center;
         align-items: center;
+        padding: 16px 40px 32px;
+        border-radius: 8px;
+    }
+
+    .thumbnail-card:hover {
+        background: #ffffff40;
+        cursor: pointer;
     }
 
     .thumbnail-card img {
         width: 100%;
         height: auto;
         object-fit: cover;
-        position: absolute;
         top: 1.9em;
     }
 
     .thumbnail-card .app-name,
     .thumbnail-card .timestamp,
     .thumbnail-card .matching-text {
-        position: absolute;
         color: #FFFFFF;
     }
 

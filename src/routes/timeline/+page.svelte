@@ -53,6 +53,7 @@
         const newFrame = Math.round(swipePosition);
         if (newFrame !== frameNumber) {
             frameNumber = newFrame;
+            window.location.hash = `frame${frameNumber}`
             loadImage();
         }
     }
@@ -69,9 +70,15 @@
         if (maxFrameInfoResponse.ok) {
             const maxFrameInfo = await maxFrameInfoResponse.json();
             maxFrameNumber = maxFrameInfo.max_frame;
-            frameNumber = maxFrameNumber;
-            swipePosition = frameNumber;
         }
+        // Check if a frame number is specified in the URL hash
+        const frameFromHash = parseInt(window.location.hash.slice(6)); // Assuming hash is like "#frame123"
+        if (!isNaN(frameFromHash)) {
+            frameNumber = Math.max(minFrameNumber, Math.min(frameFromHash, maxFrameNumber));
+        } else {
+            frameNumber = maxFrameNumber;
+        }
+        swipePosition = frameNumber;
       window.onwheel = (event) => {
           handlePan(event);
         event.stopPropagation();
