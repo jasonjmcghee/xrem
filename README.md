@@ -20,8 +20,8 @@ Currently implements, in a parallel / non-blocking way:
 - calculate text embedding (rem doesn't have this yet lol, and this is commented out anyway for now, but it works)
 - stream to mp4 without writing pngs to disk
 - basic tray icon + menu
-- options which open svelte-based windows of future functionality
 - efficient timeline seeking of a recorded data (with front-end)
+- view and "search" history as thumbnails: i put it in quotes because search is not working well yet
 - navigate to timeline frame by clicking search result
 
 NOTE: 
