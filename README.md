@@ -71,9 +71,8 @@ BUT, this is using cross-platform rust libraries for the functionality we need.
 - frame extraction by index from mp4 videos
 
 ## not implemented at all
-- [ ] timeline UI / full screen ui leverage frame extraction
-    - [ ] Live OCR
-        - overlay transparent text on image so as to be selectable
-- [ ] search UI (display thumbnails, matched text, date, application?)
+- [ ] Live OCR
+    - overlay transparent text on image so as to be selectable (potentially works on Mac due to webview, but won't work elsewhere)
+- [ ] better search UI (matched text - not working well, date, application?)
 - [ ] settings
 - [ ] window-specific OCR / filtering
