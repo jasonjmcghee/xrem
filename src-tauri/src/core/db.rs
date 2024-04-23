@@ -410,7 +410,9 @@ impl DatabaseManager {
     // Method to get the maximum frame ID
     pub fn get_max_frame(&self) -> Result<i64> {
         self.conn
-            .query_row("SELECT MAX(id) FROM frames", [], |row| row.get(0))
+            .query_row("SELECT IFNULL(MAX(id), 0) FROM frames", [], |row| {
+                row.get(0)
+            })
     }
 
     // Method to get the last accessible frame ID
