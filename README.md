@@ -58,21 +58,12 @@ BUT, this is using cross-platform rust libraries for the functionality we need.
 - why is the current ocr solution screaming about ARNs?
     - idk, if it was AWS's textract it might make more sense
 - not having live text analysis (MacOS) seems like selecting from past screenshots will be much harder to build
-    - yeah  
-
-## in progress
-- basic timeline ui
-- local rust server for front to retrieve data from
-
-## drafted / might work if actually called
-- DB layer -> talking to duckdb
-    - very likely the wrong solution b/c it was built for OLAP and rebuilding the FTS index constantly is a terrible idea.
-    - should probably use sqlite instead
-- frame extraction by index from mp4 videos
+    - yeah
 
 ## not implemented at all
 - [ ] Live OCR
     - overlay transparent text on image so as to be selectable (potentially works on Mac due to webview, but won't work elsewhere)
 - [ ] better search UI (matched text - not working well, date, application?)
+- [ ] natural language search
 - [ ] settings
 - [ ] window-specific OCR / filtering
