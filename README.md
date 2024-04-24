@@ -4,9 +4,9 @@ Cross-platform in-progress implementation of [rem](https://github.com/jasonjmcgh
 
 Way too early to use- seriously, it's not useful yet.
 
-> I don't care
+> But I want to help develop it!
 
-Fine. Just run:
+Oh! That'd be awesome. Just run:
 
 `npm run tauri dev -- --release`
 
